@@ -8,5 +8,5 @@ in zweite Teil muss User login machen. In diesem Teil habe ich kein User erstell
 Ich habe Bet klasse implementriert, aber die funktionalität habe ich nicht benutzt wegen hartcodierte teil in code.
 
 ### **Testfälle**
-![Screen Recording 2024-05-30 at 20.24.19.gif](..%2F..%2F..%2F..%2FDownloads%2FScreen%20Recording%202024-05-30%20at%2020.24.19.gif)
-![Screen Recording 2024-05-30 at 21.01.15.gif](..%2F..%2F..%2F..%2FDownloads%2FScreen%20Recording%202024-05-30%20at%2021.01.15.gif)
+![Screen Recording 2024-05-30 at 20.24.19.gif](Screen%20Recording%202024-05-30%20at%2020.24.19.gif)
+![Screen Recording 2024-05-30 at 21.01.15.gif](Screen%20Recording%202024-05-30%20at%2021.01.15.gif)

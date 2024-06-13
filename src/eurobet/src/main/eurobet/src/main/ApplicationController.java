@@ -1,7 +1,6 @@
 package eurobet.src.main;
 
 import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.geometry.HPos;
 import javafx.geometry.Insets;
 import javafx.scene.Scene;
@@ -12,17 +11,16 @@ import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
+import java.rmi.RemoteException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 
 public class ApplicationController {
     private Button loginBtn;
     private GridPane rootPane;
-    private ListView<Match> gamesView;
+    private ListView<Match> gamesList;
     private ListView<Bet> betListView;
     private TextField[] fieldForUserCheck;
-    private ObservableList<Match> games = FXCollections.observableArrayList();
-    private ObservableList<Bet> bets = FXCollections.observableArrayList();
     private RadioButton firstTeam;
     private RadioButton secondTeam;
     private RadioButton draw;
@@ -31,6 +29,40 @@ public class ApplicationController {
     private String secondTeamName;
     private ToggleGroup toggleGroup;
     private String location;
+    private BetServer betServer;
+    private UserServer userServer;
+    private User curUser;
+    private GameServer gameServer;
+
+    public void setGameServer(GameServer gameServer) {
+        this.gameServer = gameServer;
+    }
+
+    public void setBetServer(BetServer betServer) {
+        this.betServer = betServer;
+    }
+
+    public void setUserServer(UserServer userServer) {
+        this.userServer = userServer;
+    }
+
+    private ListView<Bet> createBetList() throws RemoteException {
+        ListView<Bet> temp = new ListView<>();
+        temp.setPrefHeight(190);
+        temp.setFixedCellSize(25);
+        temp.setItems(FXCollections.observableArrayList(betServer.getBets()));
+        temp.scrollTo(temp.getItems().size());
+        return temp;
+    }
+
+    private ListView<Match> createGameList() throws RemoteException {
+        ListView<Match> temp = new ListView<>();
+        temp.setPrefHeight(190);
+        temp.setFixedCellSize(25);
+        temp.setItems(FXCollections.observableArrayList(gameServer.getGames()));
+        temp.scrollTo(temp.getItems().size());
+        return temp;
+    }
 
     public GridPane createMainApplicationPane() {
         rootPane = new GridPane();
@@ -41,7 +73,7 @@ public class ApplicationController {
         TextField text1 = new TextField();
         fieldForUserCheck[0] = text1;
         GridPane.setHgrow(text1, Priority.ALWAYS);
-        TextField text2 = new TextField();
+        TextField text2 = new PasswordField();
         fieldForUserCheck[1] = text2;
         GridPane.setHgrow(text2, Priority.ALWAYS);
         loginBtn = new Button("Login");
@@ -56,21 +88,31 @@ public class ApplicationController {
     }
 
     public boolean isValidUser() {
-        return (fieldForUserCheck[0].getText().equals("mika") && fieldForUserCheck[1].getText().equals("mika"));
+        try {
+            curUser = userServer.isValidUser(fieldForUserCheck[0].getText(), fieldForUserCheck[1].getText());
+            return curUser != null ? true : false;
+        } catch (RemoteException e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
-    public void showGamesListDialog() {
-        gamesView = createGameList();
-        gamesView.setItems(GameList.getInstance().getGameList());
-        int point = 22;
-        betListView = createBetList();
-        betListView.setItems(BetList.getInstance().getBetList());
+    public void showGamesListDialog() throws RemoteException {
+        try {
+            gamesList = createGameList();
+            gamesList.getItems().setAll(gameServer.getGames());
+            betListView = createBetList();
+            betListView.getItems().setAll(betServer.getBets());
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
+        int point = curUser.getPoints();
         GridPane grid= displayFutureMatch();
         Label labelForPoint = new Label("Your points:  " + point);
         VBox v = new VBox(labelForPoint, grid);
         v.setSpacing(20);
         v.setPadding(new Insets(10));
-        HBox h = new HBox(gamesView, betListView, v);
+        HBox h = new HBox(gamesList, betListView, v);
         h.setSpacing(20);
         h.setPadding(new Insets(10));
         HBox.setHgrow(h, Priority.ALWAYS);
@@ -79,19 +121,34 @@ public class ApplicationController {
         stage.setTitle("Welcome");
         stage.setScene(scene);
         stage.show();
-        submitBtn.setOnAction(event -> displayBet());
+        submitBtn.setOnAction(event -> {
+            try {
+                displayBet();
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
-    private GridPane displayFutureMatch() {
+    private Match onComingMatch() throws RemoteException {
+        for(int i = 0; i < gameServer.getGames().size(); i++) {
+            if(gameServer.getGames().get(i).getDate().isAfter(LocalDateTime.now().minusMinutes(95)))
+                return gameServer.getGames().get(i);
+        }
+        return null;
+    }
+
+    private GridPane displayFutureMatch() throws RemoteException {
         GridPane grid = new GridPane();
+        Match matchForBet = onComingMatch() != null ? onComingMatch() : null;
         grid.add(new Label("Bet on the upcoming match:"), 1, 0);
-        location = "Italy";
+        location = matchForBet == null ? "" : matchForBet.getMatchLocation();
         grid.add(new Label("Location: " + location),1, 1);
         toggleGroup = new ToggleGroup();
-        firstTeamName = "Dortmund";
+        firstTeamName = matchForBet == null ? "" : matchForBet.getTeams().get(0).getName();
         firstTeam = new RadioButton(firstTeamName);
         firstTeam.setToggleGroup(toggleGroup);
-        secondTeamName = "Barcelona";
+        secondTeamName = matchForBet == null ? "" : matchForBet.getTeams().get(1).getName();
         secondTeam = new RadioButton(secondTeamName);
         secondTeam.setToggleGroup(toggleGroup);
         draw = new RadioButton("draw");
@@ -107,7 +164,7 @@ public class ApplicationController {
         return grid;
     }
 
-    public void displayBet() {
+    public void displayBet() throws RemoteException {
         String selectedTeam = ((RadioButton) toggleGroup.getSelectedToggle()).getText();
         ArrayList<Team> pair = new ArrayList<>();
         pair.add(new Team(firstTeamName));
@@ -118,51 +175,15 @@ public class ApplicationController {
         Match newMatch = new Match(pair, location, date, result);
         ArrayList<Match> usersBet = new ArrayList<>();
         usersBet.add(newMatch);
-        Bet newbet = new Bet(new User("mika", "mika", "mika", "mika"), usersBet);
-        BetList.getInstance().addBet(newbet);
-        if (betListView != null) {
-            betListView.setItems(BetList.getInstance().getBetList());
-        } else {
-            System.out.println("betListView is not initialized.");
-        }
-    }
-
-    // this methode is for testing
-    private void createMatch() {
-        Team t1 = new Team("Napoli");
-        Team t2 = new Team("Barcelona");
-        ArrayList<Team> pair =new ArrayList<>();
-        pair.add(t1);
-        pair.add(t2);
-        LocalDateTime date = LocalDateTime.of(2023, 6, 15, 18, 30);
-        Match m1 = new Match(pair, "Spain",date ,"1 : 1");
-        GameList.getInstance().addMatch(m1);
-    }
-
-    private ListView<Match> createGameList() {
-        createMatch();
-        ListView<Match> temp = new ListView<>();
-        temp.setPrefHeight(190);
-        temp.setFixedCellSize(25);
-        temp.setItems(games);
-        temp.scrollTo(games.size());
-        return temp;
-    }
-
-    private ListView<Bet> createBetList() {
-        ListView<Bet> temp = new ListView<>();
-        temp.setPrefHeight(190);
-        temp.setFixedCellSize(25);
-        temp.setItems(bets);
-        temp.scrollTo(bets.size());
-        return temp;
+        Bet newbet = new Bet(curUser, usersBet);
+        Match matchForBet = onComingMatch() != null ? onComingMatch() : null;
+        newbet.addTip(matchForBet, newMatch);
+        betServer.addBet(newbet);
+        betListView.getItems().add(newbet);
     }
 
     public Button getLoginBtn() {
         return loginBtn;
     }
 
-    public Button getSubmitBtn() {
-        return submitBtn;
-    }
 }

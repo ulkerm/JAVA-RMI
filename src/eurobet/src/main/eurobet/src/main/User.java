@@ -1,14 +1,14 @@
 package eurobet.src.main;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 
-public class User {
+public class User implements Serializable {
 
     private String firstName;
     private String lastName;
     private String userName;
     private String password;
-    //private boolean isFraud;
     private int points = 0;
     private ArrayList<Match> tips = new ArrayList<>();
 
@@ -17,7 +17,6 @@ public class User {
         this.lastName = lastName;
         this.userName = userName;
         this.password = password;
-        //this.isFraud = isFraud;   // change it
     }
 
     public String getFirstName() {

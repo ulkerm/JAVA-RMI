@@ -1,7 +1,6 @@
 package eurobet.src.main;
 
 import javafx.collections.FXCollections;
-import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -10,6 +9,9 @@ import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
 import javafx.scene.layout.VBox;
 
+import java.rmi.Naming;
+import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
@@ -24,29 +26,93 @@ public class Controller {
     private Button createUserBtn;
     private Button addTeamBtn;
     private HBox rootPane;
-    ListView<Match> gamesList;
-    ListView<User> messageList;
-    ListView<Team> teamList;
+    private ListView<Match> gamesList;
+    private ListView<User> userList;
+    private ListView<Team> teamList;
 
     private TextField[] fields;
     private DatePicker date;
     private Spinner<Integer> hourSpinner;
-    Spinner<Integer> minuteSpinner;
+    private Spinner<Integer> minuteSpinner;
+    private UserServer userServer;
+    private GameServer gameServer;
+    private TeamServer teamServer;
 
-    private ObservableList<Match> games = FXCollections.observableArrayList();
-    private ObservableList<User> userslist = FXCollections.observableArrayList();
-    private ObservableList<Team> teams = FXCollections.observableArrayList();
+    public static void main(String[] args) {
+        try {
+            LocateRegistry.createRegistry(1099);
+            System.out.println("RMI Registry started on port 1099");
+
+            UserServerImpl userServer = new UserServerImpl();
+            Naming.rebind("rmi://localhost/UserServer", userServer);
+            System.out.println("UserServer is running...");
+
+            GameServerImpl gameServer = new GameServerImpl();
+            Naming.rebind("rmi://localhost/GameServer", gameServer);
+            System.out.println("GameServer is running...");
+
+            TeamServerImpl teamServer = new TeamServerImpl();
+            Naming.rebind("rmi://localhost/TeamServer", teamServer);
+            System.out.println("TeamServer is running...");
+
+            BetServerImpl betServer = new BetServerImpl();
+            Naming.rebind("rmi://localhost/BetServer", betServer);
+            System.out.println("BetServer is running...");
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void setUserServer(UserServer userServer) {
+        this.userServer = userServer;
+    }
+
+    public void setGameServer(GameServer gameServer) {
+        this.gameServer = gameServer;
+    }
+
+    public void setTeamServer(TeamServer teamServer) {
+        this.teamServer = teamServer;
+    }
+
+    private ListView<User> createUserList() throws RemoteException {
+        ListView<User> temp = new ListView<>();
+        temp.setPrefHeight(190);
+        temp.setFixedCellSize(25);
+        temp.setItems(FXCollections.observableArrayList(userServer.getUsers()));
+        temp.scrollTo(temp.getItems().size());
+        return temp;
+    }
+
+    private ListView<Team> createTeamList() throws RemoteException {
+        ListView<Team> temp = new ListView<>();
+        temp.setPrefHeight(190);
+        temp.setFixedCellSize(25);
+        temp.setItems(FXCollections.observableArrayList(teamServer.getTeams()));
+        temp.scrollTo(temp.getItems().size());
+        return temp;
+    }
+
+    private ListView<Match> createGameList() throws RemoteException {
+        ListView<Match> temp = new ListView<>();
+        temp.setPrefHeight(190);
+        temp.setFixedCellSize(25);
+        temp.setItems(FXCollections.observableArrayList(gameServer.getGames()));
+        temp.scrollTo(temp.getItems().size());
+        return temp;
+    }
 
     public HBox createMainPane() {
-        gamesList = createGameList();
-        messageList = createMessageList(userslist);
-        teamList = createTeamList(teams);
-        teamList.setItems(TeamList.getInstance().getTeamList());
-        teamList.scrollTo(TeamList.getInstance().getTeamList().size());
-        gamesList.setItems(GameList.getInstance().getGameList());
-        gamesList.scrollTo(GameList.getInstance().getGameList().size());
-        messageList.setItems(UserList.getInstance().getUserList());
-        messageList.scrollTo(UserList.getInstance().getUserList().size());
+        try {
+            gamesList = createGameList();
+            gamesList.getItems().setAll(gameServer.getGames());
+            teamList = createTeamList();
+            teamList.getItems().setAll(teamServer.getTeams());
+            userList = createUserList();
+            userList.getItems().setAll(userServer.getUsers());
+        } catch (RemoteException e) {
+            e.printStackTrace();
+        }
         gameBtn = new Button("Create a new game");
         createUserBtn = new Button("Create new user");
         resultBtn = new Button("Set result");
@@ -61,7 +127,7 @@ public class Controller {
         modifyBtn = new Button("Modify");
         HBox uH = new HBox(createUserBtn, blockBtn, modifyBtn);
         uH.setSpacing(5);
-        VBox u = new VBox(messageList, uH);
+        VBox u = new VBox(userList, uH);
         u.setSpacing(10);
 
         rootPane = new HBox();
@@ -73,32 +139,6 @@ public class Controller {
         rootPane.getChildren().addAll(t, g, u);
 
         return rootPane;
-    }
-    private ListView<Match> createGameList() {
-        ListView<Match> messageList = new ListView<>();
-        messageList.setPrefHeight(190);
-        messageList.setFixedCellSize(25);
-        HBox.setHgrow(messageList, Priority.ALWAYS);
-        messageList.setItems(games);
-        return messageList;
-    }
-
-    private ListView<User> createMessageList(ObservableList<User> messages) {
-        ListView<User> messageList = new ListView<>();
-        messageList.setPrefHeight(190);
-        messageList.setFixedCellSize(25);
-        HBox.setHgrow(messageList, Priority.ALWAYS);
-        messageList.setItems(messages);
-        return messageList;
-    }
-
-    private ListView<Team> createTeamList(ObservableList<Team> list) {
-        ListView<Team> teamList = new ListView<>();
-        teamList.setPrefHeight(190);
-        teamList.setFixedCellSize(25);
-        HBox.setHgrow(teamList, Priority.ALWAYS);
-        teamList.setItems(list);
-        return teamList;
     }
 
     public GridPane createNewMatch() {
@@ -145,7 +185,7 @@ public class Controller {
         return grid;
     }
 
-    public void showCreateNewMatchDialog() {
+    public void showCreateNewMatchDialog() throws RemoteException {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(rootPane.getScene().getWindow());
         dialog.setTitle("Add New Match");
@@ -169,8 +209,8 @@ public class Controller {
             pair.add(first);
             pair.add(second);
             Match newMatch = new Match(pair, location, matchDate, resultOfTheGame);
-            GameList.getInstance().addMatch(newMatch);
-            gamesList.setItems(GameList.getInstance().getGameList());
+            gameServer.addGame(newMatch);
+            gamesList.getItems().add(newMatch);
         }
     }
 
@@ -188,7 +228,7 @@ public class Controller {
         return grid;
     }
 
-    public void showSetResultDialog() {
+    public void showSetResultDialog() throws RemoteException {
         Match newMatch = gamesList.getSelectionModel().selectedItemProperty().get();
         if (newMatch == null) {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
@@ -208,7 +248,8 @@ public class Controller {
         Optional<ButtonType> result = dialog.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
             newMatch.setResult(fields[0].getText().trim());
-            gamesList.setItems(GameList.getInstance().getGameList());
+            gamesList.getItems();
+            gameServer.updateGame(newMatch);
         }
         gamesList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
         gamesList.getSelectionModel().selectFirst();
@@ -243,7 +284,7 @@ public class Controller {
         return grid;
     }
 
-    public void showUserDialog() {
+    public void showUserDialog() throws RemoteException {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(rootPane.getScene().getWindow());
         dialog.setTitle("New user");
@@ -291,8 +332,8 @@ public class Controller {
         return grid;
     }
 
-    public void showUserModifyDialog() {
-        User newUser = messageList.getSelectionModel().selectedItemProperty().get();
+    public void showUserModifyDialog() throws RemoteException {
+        User newUser = userList.getSelectionModel().selectedItemProperty().get();
         if (newUser == null) {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("No user Selected");
@@ -314,10 +355,12 @@ public class Controller {
             newUser.setLastName(fields[1].getText().trim());
             newUser.setPassword(fields[2].getText().trim());
             newUser.setUserName(fields[3].getText().trim());
-            messageList.setItems(UserList.getInstance().getUserList());
+            userList.getItems();
+            ArrayList<User> newList = new ArrayList<>(userList.getItems());
+            userServer.modifyUser(newList);
         }
-        messageList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-        messageList.getSelectionModel().selectFirst();
+        userList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+        userList.getSelectionModel().selectFirst();
     }
 
     private User create() {
@@ -330,18 +373,18 @@ public class Controller {
         return newUser;
     }
 
-    public void processResults() {
+    public void processResults() throws RemoteException {
         User newUser = create();
-        UserList.getInstance().addUser(newUser);
-        messageList.setItems(UserList.getInstance().getUserList()); // Refresh the user list
+        userServer.addUser(newUser);
+        userList.getItems().add(newUser);
     }
 
-    public void blockUser() {
-        User newUser = messageList.getSelectionModel().selectedItemProperty().get();
-        UserList.getInstance().deleteUser(newUser);
-        messageList.setItems(UserList.getInstance().getUserList());
-        messageList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
-        messageList.getSelectionModel().selectFirst();
+    public void blockUser() throws RemoteException {
+        User newUser = userList.getSelectionModel().selectedItemProperty().get();
+        userServer.deleteUser(newUser);
+        userList.getItems().remove(newUser);
+        userList.getSelectionModel().setSelectionMode(SelectionMode.SINGLE);
+        userList.getSelectionModel().selectFirst();
     }
 
     private GridPane createNewTeamWindow() {
@@ -358,7 +401,7 @@ public class Controller {
         return grid;
     }
 
-    public void showNewTeamDialog() {
+    public void showNewTeamDialog() throws RemoteException {
         Dialog<ButtonType> dialog = new Dialog<>();
         dialog.initOwner(rootPane.getScene().getWindow());
         dialog.setTitle("Add Teams");
@@ -369,8 +412,10 @@ public class Controller {
         Optional<ButtonType> result = dialog.showAndWait();
         if (result.isPresent() && result.get() == ButtonType.OK) {
             Team newTeam = new Team(fields[0].getText().trim());
-            TeamList.getInstance().addTeam(newTeam);
-            teamList.setItems(TeamList.getInstance().getTeamList());
+            teamServer.addTeam(newTeam);
+            teamList.getItems().add(newTeam);
+            //TeamList.getInstance().addTeam(newTeam);
+            //teamList.setItems(TeamList.getInstance().getTeamList());
         }
     }
 
